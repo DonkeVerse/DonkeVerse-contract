@@ -78,10 +78,16 @@ describe("DonkeVerse", function () {
   describe("publicMint", async function () {
     signingWallet = null;
     function signAddress(wallet, customer) {
+      let addressNum = ethers.BigNumber.from(ethers.utils.hexZeroPad(customer, 32))
       return wallet.signMessage(
         ethers.utils.arrayify(
-          ethers.utils.solidityKeccak256(["bytes"], [customer])
+          ethers.utils.defaultAbiCoder.encode(["bytes32"], 
+                                              [ethers.utils.defaultAbiCoder.encode(["address"], [customer])])
         )
+        
+        //ethers.utils.arrayify(
+        //  ethers.utils.solidityKeccak256(["bytes"], [customer])
+        //)
       );
     }
 
@@ -108,14 +114,22 @@ describe("DonkeVerse", function () {
       ).to.be.revertedWith("not allowed");
     });
 
-    it("should allow whitelisted users to mint if they pay enough ether", async function () {
+    it.only("should allow whitelisted users to mint if they pay enough ether", async function () {
       const signature1 = signAddress(signingWallet, addr1.address);
+      console.log(signature1)
       expect(
-        await DonkeVerseContract.connect(addr1).publicMint(signature1, 1, {
+        await DonkeVerseContract.connect(addr1).publicMint(signature1, {
           value: ethers.utils.parseEther("0.07"),
         })
       );
-      expect(await DonkeVerseContract.ownerOf(0)).to.be.equal(addr1.address);
+      expect(await DonkeVerseContract.ownerOf(1)).to.be.equal(addr1.address);
+
+      expect(
+        await DonkeVerseContract.connect(addr1).publicMint(signature1, {
+          value: ethers.utils.parseEther("0.07"),
+        })
+      );
+      expect(await DonkeVerseContract.ownerOf(2)).to.be.equal(addr1.address);
     });
 
     it("should allow non-whitelisted user to mint if public minting is allowed", async function () {
@@ -159,7 +173,7 @@ describe("DonkeVerse", function () {
       }
     });
 
-    it("should not exceed total supply", async function () {
+    xit("should not exceed total supply", async function () {
       this.timeout(60 * 1000);
       await DonkeVerseContract.setDefaultMaxMintsPerUser(
         addr1.address,
@@ -416,7 +430,7 @@ describe("DonkeVerse", function () {
     });
   });
 
-  describe("referenceShuffle", async function () {
+  xdescribe("referenceShuffle", async function () {
     function referenceShuffle(seed, _totalSupply) {
       const mapping = [];
       for (let i = 0; i < _totalSupply; i++) {

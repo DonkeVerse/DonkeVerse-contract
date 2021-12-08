@@ -28,6 +28,7 @@
     "web3": "^1.6.1"
   },
   "dependencies": {
-    "@rarible/royalties": "^0.7.2"
+    "ethereum-tx-decoder": "^3.0.0",
+    "merkletreejs": "^0.2.26"
   }
 }

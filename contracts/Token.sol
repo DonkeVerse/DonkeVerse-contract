@@ -1,12 +1,15 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity 0.8.9;
+pragma solidity 0.8.10;
 
-import "node_modules/@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "node_modules/@openzeppelin/contracts/access/Ownable.sol";
-import "node_modules/@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "node_modules/@openzeppelin/contracts/utils/Strings.sol";
-import "node_modules/@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
 import "./@rarible/royalties/contracts/LibRoyaltiesV1.sol";
+
+import "hardhat/console.sol";
 
 contract DonkeVerse is ERC721, Ownable, VRFConsumerBase {
     using ECDSA for bytes32;
@@ -16,10 +19,10 @@ contract DonkeVerse is ERC721, Ownable, VRFConsumerBase {
     uint256 public verifiedRandomResult;
     bytes32 public randomnessRequestId;
 
-    uint32 public constant MAX_TOKEN_SUPPLY = 10000;
     uint32 public tokenSupply = 0;
-    uint32 public allowPublicMinting = 0;
+    uint32 public constant MAX_TOKEN_SUPPLY = 10000;
     uint32 public defaultMaxMintsPerUser = 5;
+    uint32 public allowPublicMinting = 0;
     uint32 public isRevealed = 0;
     uint32 public foreverLocked = 0;
     uint32 public numberOfTimesRandomNumberGeneratorCalled = 0;
@@ -96,7 +99,7 @@ contract DonkeVerse is ERC721, Ownable, VRFConsumerBase {
         price = _price;
     }
 
-    function setExceptionMaxMintsForAddress(address _address, uint32 _amount)
+    function setExceptionMaxMintsForAddress(address _address, uint256 _amount)
         external
         onlyOwner
     {
@@ -104,10 +107,10 @@ contract DonkeVerse is ERC721, Ownable, VRFConsumerBase {
         overrideMaxMintsPerUser[_address] = _amount;
     }
 
-    function setDefaultMaxMintsPerUser(uint32 _amount) external onlyOwner {
-        require(_amount < MAX_TOKEN_SUPPLY, "to high");
-        defaultMaxMintsPerUser = _amount;
-    }
+    //function setDefaultMaxMintsPerUser(uint32 _amount) external onlyOwner {
+    //    require(_amount < MAX_TOKEN_SUPPLY, "to high");
+    //    defaultMaxMintsPerUser = _amount;
+    //}
 
     function setPrivateMintAddress(address _address) external onlyOwner {
         require(_address != publicMintingAddress, "not allowed");
@@ -118,6 +121,7 @@ contract DonkeVerse is ERC721, Ownable, VRFConsumerBase {
         publicMintingAddress = _address;
     }
 
+    /*
     function setRoyaltyBasisPoints(uint32 _royaltyBasisPoints)
         external
         onlyOwner
@@ -125,6 +129,7 @@ contract DonkeVerse is ERC721, Ownable, VRFConsumerBase {
         require(_royaltyBasisPoints <= 5000, "invalid royalty");
         royaltyBasisPoints = _royaltyBasisPoints;
     }
+    */
 
     function withdraw() external onlyOwner {
         payable(msg.sender).transfer(address(this).balance);
@@ -136,42 +141,74 @@ contract DonkeVerse is ERC721, Ownable, VRFConsumerBase {
     }
 
     // minting functions
-    function privateMint(bytes calldata _signature, uint256 _amount) external {
+    function privateMint(bytes calldata _signature, uint32 _amount) external {
         require(isAllowedToPrivateMint(msg.sender, _signature), "not eligible");
-        internalMint(msg.sender, _amount);
+        //internalMint(msg.sender, _amount);
     }
 
-    function publicMint(bytes calldata _signature, uint256 _amount)
+    //                  First Mint | Second Mint
+    // -----------------------------------------
+    // OpenSea         294,128 gas |     n/a gas
+    // Rarible         222,003 gas |     n/a gas
+    // MekaVerse       159,897 gas | unknown gas
+    // The Littles     158,866 gas | unknown gas
+    // Doodles         155,399 gas | unknown gas
+    // BAYC            153,994 gas | unknown gas
+    // Cool Cats       152,578 gas | unknown gas
+    // ZenApes         104,052 gas |  86,952 gas
+    // DonkeVerse       81,458 gas |  64,505 gas
+    //
+    // To calculate the gas cost in eth:
+    // divide the gas cost by 1 billion, 
+    // then multipy by the gas price in gwei
+    // e.g. 103,678 / 1,000,000,000 x 80 = 0.00829424 ETH
+    // if the current gas price is 80 gwei
+
+    function publicMint(bytes calldata _signature)
         external
         payable
     {
-        require(
-            allowPublicMinting == 1 ||
-                isAllowedToPublicMint(msg.sender, _signature),
-            "not allowed"
-        );
-        require(msg.value >= price, "price too low");
-        // solhint-disable-next-line avoid-tx-origin
-        require(tx.origin == msg.sender, "no smart contracts");
+        // _tokenSupply is used twice below, so loading it into memory prevents an extra SLOAD op code
+        uint32 _tokenSupply = tokenSupply;
 
-        internalMint(msg.sender, _amount);
-    }
+        require(_tokenSupply < 10000, "max supply");
+        require(ERC721._balances[msg.sender] < 2, "user limit");
+        require(publicMintingAddress == bytes32(uint256(uint160(msg.sender))).toEthSignedMessageHash().recover(_signature), "not allowed");
+        require(msg.value == 0.07 ether, "wrong price");
 
-    function internalMint(address _address, uint256 _amount) private {
-        require(tokenSupply + _amount <= MAX_TOKEN_SUPPLY, "max supply");
-        require(
-            _amount + amountMintedSoFar[msg.sender] <= defaultMaxMintsPerUser ||
-                _amount + amountMintedSoFar[msg.sender] <=
-                overrideMaxMintsPerUser[msg.sender],
-            "quantity too big"
-        );
-
-        for (uint256 i = 0; i < _amount; i++) {
-            tokenSupply += 1;
-            amountMintedSoFar[msg.sender] += 1;
-            _mint(_address, tokenSupply - 1);
+        unchecked {
+            _tokenSupply++;
         }
+        tokenSupply = _tokenSupply;
+        _mint(msg.sender, _tokenSupply);
     }
+
+    bytes32 root = "";
+
+    /*
+    function presale(bytes32[] memory proof, bytes32 leaf)
+        external
+        payable
+    {
+        // saves gas by avoiding extra SLOAD op codes
+        uint256 _amountMintedSoFar = amountMintedSoFar[msg.sender];
+        uint256 _tokenSupply = tokenSupply;
+
+        require(_amountMintedSoFar < 2, "user limit");
+        require(_tokenSupply < 10000, "max supply");
+        //require(verify(proof, root, leaf));
+        //require(publicMintingAddress == keccak256(abi.encodePacked(msg.sender)).toEthSignedMessageHash().recover(_signature), "not allowed");
+        require(msg.value == 0.07 ether, "wrong price");
+
+        // these cannot overflow because of the checks above so we save gas by using unchecked
+        unchecked {
+            amountMintedSoFar[msg.sender] = _amountMintedSoFar + 1;
+            tokenSupply = _tokenSupply + 1;
+        }
+        
+        _mint(msg.sender, tokenSupply);
+    }
+    */
 
     // functions for users to get information
 
@@ -203,10 +240,7 @@ contract DonkeVerse is ERC721, Ownable, VRFConsumerBase {
         bytes memory _signature
     ) internal pure returns (bool) {
         return
-            _address ==
-            keccak256(abi.encodePacked(_account))
-                .toEthSignedMessageHash()
-                .recover(_signature);
+            _address == keccak256(abi.encodePacked(_account)).toEthSignedMessageHash().recover(_signature);
     }
 
     function isAllowedToPrivateMint(address _account, bytes memory _signature)
