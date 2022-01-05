@@ -17,6 +17,7 @@ Do this stuff
 npx prettier '**/*.{json,sol,md}' --write
 npx eslint '**/*.js' --fix
 npx solhint 'contracts/**/*.sol' --fix
+npx hardhat test
 ```
 
 To run slither
