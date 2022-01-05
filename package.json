@@ -27,7 +27,6 @@
   "dependencies": {
     "ethereum-tx-decoder": "^3.0.0",
     "hardhat-prettier": "^0.0.1",
-    "keccak256": "^1.0.6",
     "prettier": "^2.5.1",
     "prettier-plugin-solidity": "^1.0.0-beta.1"
   }
