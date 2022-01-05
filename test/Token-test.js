@@ -1,20 +1,15 @@
 const { expect } = require("chai");
-const { ethers, solidity } = require("hardhat");
-
-const crypto = require("crypto");
-const keccak256 = require("keccak256");
-const { MerkleTree } = require("merkletreejs");
+const { ethers } = require("hardhat");
 
 describe("DonkeVerse", function () {
   let DonkeVerseContract = null;
   let owner = null;
   let addr1 = null;
-  let whitelistingAddress = null;
   let addr2 = null;
 
   beforeEach(async function () {
     const dv = await ethers.getContractFactory("DonkeVerse");
-    [owner, addr1, whitelistingAddress, addr2] = await ethers.getSigners();
+    [owner, addr1, addr2] = await ethers.getSigners();
 
     DonkeVerseContract = await dv.deploy();
     await DonkeVerseContract.deployed();
@@ -26,43 +21,8 @@ describe("DonkeVerse", function () {
     });
   });
 
- 
-  xdescribe("presale", async function () {
-    it("should allow whitelisted person to mint", async function () {
-      addresses = [];
-      for (i = 0; i < 5000; i++) {
-        const id = crypto.randomBytes(32).toString("hex");
-        const privateKey = "0x" + id;
-        const wallet = new ethers.Wallet(privateKey);
-        addresses.push(wallet.address);
-      }
-
-      addresses.push(addr1.address);
-
-      addresses = addresses
-        .map((value) => ({ value, sort: Math.random() }))
-        .sort((a, b) => a.sort - b.sort)
-        .map(({ value }) => value);
-
-      const merkleTree = new MerkleTree(addresses, keccak256, {
-        hashLeaves: true,
-        sortPairs: true,
-      });
-      const root = merkleTree.getHexRoot();
-      const proof = merkleTree.getHexProof(keccak256(addr1.address));
-
-      await DonkeVerseContract.setWhitelist(addresses);
-
-      await DonkeVerseContract.connect(addr1).presale(proof, 0, {
-        value: ethers.utils.parseEther("0.07"),
-      });
-
-      expect(await DonkeVerseContract.ownerOf(0)).to.be.equal(addr1.address);
-    });
-  });
-
   describe("publicMint", async function () {
-    signingWallet = null;
+    let signingWallet = null;
     function signAddress(wallet, customer) {
       return wallet.signMessage(
         ethers.utils.arrayify(
@@ -75,8 +35,6 @@ describe("DonkeVerse", function () {
     }
 
     beforeEach(async function () {
-      const privateKeyWhitelist =
-        "0x0123456789012345678901234567890123456789012345678901234567890123";
       // signingWallet = addr1.privateKey
       signingWallet = addr1;
 
@@ -90,7 +48,6 @@ describe("DonkeVerse", function () {
     });
 
     it("should reject using the signature of another address", async function () {
-      const signature = signAddress(signingWallet, addr1.address);
       await expect(
         DonkeVerseContract.connect(addr2).publicMint(
           "0xf15658ed1ec8799e6e3644a3d21240c5aebc48a347fdbf8b3a62c9e1a8b4189c0b7ffcbd3eb664de69bc12e916a96f8e67159b549348690b0b52d4e501f380e81b"
@@ -133,7 +90,7 @@ describe("DonkeVerse", function () {
           value: ethers.utils.parseEther("0.07"),
         })
       );
-      for (i = 0; i < 6; i++) {
+      for (let i = 0; i < 6; i++) {
         expect(await DonkeVerseContract.ownerOf(i)).to.be.equal(addr1.address);
       }
     });
@@ -149,7 +106,7 @@ describe("DonkeVerse", function () {
       let totalMints = 0;
 
       // mint 9999 times
-      for (i = 0; i < 9; i++) {
+      for (let i = 0; i < 9; i++) {
         totalMints += 1000;
         await DonkeVerseContract.connect(addr1).publicMint(signature1, 1000, {
           value: ethers.utils.parseEther("0.07"),
@@ -172,7 +129,7 @@ describe("DonkeVerse", function () {
   });
 
   describe("privateMint", async function () {
-    signingWallet = null;
+    let signingWallet = null;
     function signAddress(wallet, customer) {
       return wallet.signMessage(
         ethers.utils.arrayify(
@@ -185,22 +142,21 @@ describe("DonkeVerse", function () {
     }
 
     beforeEach(async function () {
-      const privateKeyWhitelist =
-        "0xB123456789012345678901234567890123456789012345678901234567890123";
-      signingWallet = new ethers.Wallet(privateKeyWhitelist);
+      signingWallet = addr2;
       await DonkeVerseContract.setPrivateMintAddress(signingWallet.address);
     });
 
     it("should only accept owner", async function () {
       const signature1 = signAddress(signingWallet, addr1.address);
-      await expect(DonkeVerseContract.connect(addr1).privateMint(signature1, 2))
-      .to.be.revertedWith('Ownable: caller is not the owner');
+      await expect(
+        DonkeVerseContract.connect(addr1).privateMint(signature1, 2)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
     });
 
     it("should reject alternative signatures", async function () {
       const privateKeyOtherWallet =
         "0xAAA3456789012345678901234567890123456789012345678901234567890123";
-      otherWallet = new ethers.Wallet(privateKeyOtherWallet);
+      const otherWallet = new ethers.Wallet(privateKeyOtherWallet);
       const fakeSignature = signAddress(otherWallet, addr1.address);
       await expect(
         DonkeVerseContract.connect(owner).privateMint(fakeSignature, 2)
@@ -343,7 +299,7 @@ describe("DonkeVerse", function () {
       it("should receive values", async function () {
         this.timeout(30 * 1000);
         const toUpload = Array.from(Array(7778).keys()).reverse();
-        for (i = 0; i < 6000; i += 2000) {
+        for (let i = 0; i < 6000; i += 2000) {
           await DonkeVerseContract.receiveValues(
             toUpload.slice(i, i + 2000),
             i
@@ -351,7 +307,8 @@ describe("DonkeVerse", function () {
         }
 
         await DonkeVerseContract.receiveValues(
-          toUpload.slice(6000, 7778), 6000
+          toUpload.slice(6000, 7778),
+          6000
         );
 
         expect(await DonkeVerseContract.getNftToImageMapping()).to.eql(
@@ -388,19 +345,17 @@ describe("DonkeVerse", function () {
     }
 
     it("should match javascript ipmementation", async function () {
-      console.log("Please be patient, this will take a minute")
+      console.log("Please be patient, this will take a minute");
       this.timeout(60 * 1000);
-      //const randomSeed = new ethers.BigNumber.from(
+      // const randomSeed = new ethers.BigNumber.from(
       //  "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
-      //);
+      // );
       const referenceShuffleResult = referenceShuffle(100, 7778);
       const contractShuffleResult = await DonkeVerseContract.referenceShuffle(
         100
       );
       expect(referenceShuffleResult).to.be.eql(contractShuffleResult);
     });
-
-
   });
 
   describe("withdraw", async function () {
@@ -414,7 +369,7 @@ describe("DonkeVerse", function () {
       const prov = ethers.provider;
 
       const previousBalance = await prov.getBalance(owner.address);
-      const transactionHash = await addr1.sendTransaction({
+      await addr1.sendTransaction({
         to: DonkeVerseContract.address,
         value: ethers.utils.parseEther("10.0"), // Sends exactly 1.0 ether
       });
@@ -451,18 +406,21 @@ describe("DonkeVerse", function () {
 
   describe("supportsInterface", async function () {
     it("should support raribleV1", async function () {
-      expect(await DonkeVerseContract.supportsInterface("0xb7799584")).to.be
-        .true;
+      expect(
+        await DonkeVerseContract.supportsInterface("0xb7799584")
+      ).to.equal(true);
     });
 
     it("should support ERC2981", async function () {
-      expect(await DonkeVerseContract.supportsInterface("0x2a55205a")).to.be
-        .true;
+      expect(
+        await DonkeVerseContract.supportsInterface("0x2a55205a")
+      ).to.equal(true);
     });
 
     it("should support ERC721", async function () {
-      expect(await DonkeVerseContract.supportsInterface("0x80ac58cd")).to.be
-        .true;
+      expect(
+        await DonkeVerseContract.supportsInterface("0x80ac58cd")
+      ).to.equal(true);
     });
   });
 });

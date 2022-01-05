@@ -11,7 +11,7 @@ import "./@rarible/royalties/contracts/LibRoyaltiesV1.sol";
 
 
 // TODO
-// implement pausable for trading
+// implement pausable for trading (to prevent sniping)
 // add back the hidden gas savings
 // implement burnable
 // set variable token distribution for mods and volunteers
@@ -34,13 +34,16 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
     // https://eips.ethereum.org/EIPS/eip-2981
     bytes4 private constant _INTERFACE_ID_ERC2981 = 0x2a55205a;
 
-    uint16[MAX_TOKEN_SUPPLY] public nftToImageMapping; // the result of the shuffle will be stored here.
+    // the result of the shuffle will be stored here.
+    uint16[MAX_TOKEN_SUPPLY] public nftToImageMapping;
 
-    // these cannot be initialized to zero or someone can bypass with an intentional signature failure
+    // these cannot be initialized to zero or someone 
+    // can bypass with an intentional signature failure
     address public publicMintingAddress = address(1);
     address private privateMintingAddress = address(1);
 
-    mapping(address => uint256) public extraMintsForAddress; // allows specific addresses to go over the limit
+    // allows specific addresses to go over the limit
+    mapping(address => uint256) public extraMintsForAddress;
 
     // CHANGE IN PROD - Chainlink Integration
     address private constant VRF_COORDINATOR =
@@ -58,8 +61,9 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
     string public constant BASE_URI = "https://www.example.com/metadata/";
     string public constant PLACEHOLDER = "placeholder"; // NO JSON EXTENSION
 
-    // these events allow people to track if we called the number generator more than once.
-    // We leave that as an option because there is a non-zero chance that chainlink will fail
+    // these events allow people to track if we called the number 
+    // generator more than once. We leave that as an option because 
+    // there is a non-zero chance that chainlink will fail
     event RequestedRandomNumber(address _address, bytes32 _requestId);
     event FulfillRandomness(bytes32 _requestId, uint256 _randomness);
 
@@ -73,25 +77,28 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
 
     // administrative functions
 
-    // reveal can't be undone, so metadata is safe even if the private keys are stolen
+    // reveal can't be undone, so metadata is safe even if 
+    // the private keys are stolen
     function reveal(uint256 _protection) external onlyOwner {
         require(_protection == 32, "be careful");
         isRevealed = 1;
     }
 
-    // setForeverLock can't be undone, so metadata is safe even if the private keys are stolen
+    // setForeverLock can't be undone, so metadata is safe even if 
+    // the private keys are stolen
     function setForeverLock(uint256 _protection) external onlyOwner {
         require(_protection == 50, "be careful");
         require(nextTokenIndex == MAX_TOKEN_SUPPLY, "cannot lock");
         foreverLocked = 1;
     }
 
-    // this function has a foreverLock because we don't want the values to change after the shuffle
+    // this function has a foreverLock because we don't want the values 
+    // to change after the shuffle
     function receiveValues(uint16[] calldata _shuffle, uint16 _offset)
         external
         onlyOwner
     {
-        require(foreverLocked == 0, "ForeverLocked"); // if set to 1, metadata cannot be updated
+        require(foreverLocked == 0, "ForeverLocked");
         for (uint256 i = 0; i < _shuffle.length; i++) {
             nftToImageMapping[_offset + i] = _shuffle[i];
         }
@@ -245,8 +252,9 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
     }
 
     // royalty functions
-    // Rarible updates the per id royalty during mint, but we have the same royalty
-    // across the entire collection. So to save gas during mint, we just hardcode the
+    // Rarible updates the per id royalty during mint, 
+    // but we have the same royalty across the entire collection. 
+    // So to save gas during mint, we just hardcode the
     // entire collection to be the same and ignore the uint256 input.
     function getFeeRecipients(uint256)
         external
@@ -311,11 +319,14 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
     }
     */
 
-    // Due to gas costs, we cannot shuffle on chain, because we will take up a lot of gas block limit!
-    // So instead, we get the random number seed on chain, execute the shuffle offchain, and upload the
-    // results. People need to know the shuffle algorithm and its interaction with the random seed was
-    // fixed in advance, so we publish it here. Token zero is not part of the shuffle because it is not
-    // a token.
+    // Due to gas costs, we cannot shuffle on chain, 
+    // because we will take up a lot of gas block limit!
+    // So instead, we get the random number seed on chain,
+    // execute the shuffle offchain, and upload the
+    // results. People need to know the shuffle algorithm 
+    // and its interaction with the random seed was fixed in 
+    // advance, so we publish it here. Token zero is not part 
+    // of the shuffle because it is not a token.
 
     function referenceShuffle(uint256 _seed)
         public
@@ -345,7 +356,8 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
         return initialState;
     }
 
-    // Don't call this function from a smart contract or you are basically guaranteed to run out of gas
+    // Don't call this function from a smart contract or you 
+    // are basically guaranteed to run out of gas
     // Don't call this before the random number is called.
     // Call this function after we reveal
     function wereWeHonest() external view returns (bool) {

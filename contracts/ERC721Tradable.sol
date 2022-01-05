@@ -8,7 +8,10 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./common/meta-transactions/ContentMixin.sol";
 import "./common/meta-transactions/NativeMetaTransaction.sol";
 
-contract OwnableDelegateProxy {}
+// solhint-disable-next-line no-empty-blocks
+contract OwnableDelegateProxy {
+
+}
 
 /**
  * Used to delegate ownership of a contract to another address, to save on unneeded transactions to approve contract use for users
@@ -21,8 +24,13 @@ contract ProxyRegistry {
  * @title ERC721Tradable
  * ERC721Tradable - ERC721 contract that whitelists a trading address, and has minting functionality.
  */
-abstract contract ERC721Tradable is ERC721, ContextMixin, NativeMetaTransaction, Ownable {
-    address proxyRegistryAddress;
+abstract contract ERC721Tradable is
+    ERC721,
+    ContextMixin,
+    NativeMetaTransaction,
+    Ownable
+{
+    address internal proxyRegistryAddress;
 
     constructor(
         string memory _name,
@@ -37,9 +45,9 @@ abstract contract ERC721Tradable is ERC721, ContextMixin, NativeMetaTransaction,
      * Override isApprovedForAll to whitelist user's OpenSea proxy accounts to enable gas-less listings.
      */
     function isApprovedForAll(address owner, address operator)
-        override
         public
         view
+        override
         returns (bool)
     {
         // Whitelist OpenSea proxy contract for easy trading.
@@ -54,12 +62,7 @@ abstract contract ERC721Tradable is ERC721, ContextMixin, NativeMetaTransaction,
     /**
      * This is used instead of msg.sender as transactions won't be sent by the original token owner, but by OpenSea.
      */
-    function _msgSender()
-        internal
-        override
-        view
-        returns (address sender)
-    {
+    function _msgSender() internal view override returns (address sender) {
         return ContextMixin.msgSender();
     }
 }

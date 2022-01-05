@@ -21,15 +21,14 @@
     "ethers": "^5.5.1",
     "hardhat": "^2.6.8",
     "hardhat-gas-reporter": "^1.0.4",
-    "prettier": "^2.4.1",
-    "prettier-plugin-solidity": "^1.0.0-beta.13",
     "solhint": "^3.3.6",
-    "solidity-coverage": "^0.7.17",
-    "web3": "^1.6.1"
+    "solidity-coverage": "^0.7.17"
   },
   "dependencies": {
     "ethereum-tx-decoder": "^3.0.0",
-    "keccak256": "^1.0.3",
-    "merkletreejs": "^0.2.26"
+    "hardhat-prettier": "^0.0.1",
+    "keccak256": "^1.0.6",
+    "prettier": "^2.5.1",
+    "prettier-plugin-solidity": "^1.0.0-beta.1"
   }
 }

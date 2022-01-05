@@ -1,4 +1,5 @@
 # WIP
+
 contract for (donkeverse.com)[donkeverse.com]
 
 Install solc on Mac OS X
@@ -11,10 +12,12 @@ brew install solidity
 ```
 
 Do this stuff
+
 ```
-check prettier
-check solhint
-check coverage
-check slither
+npx prettier '**/*.{json,sol,md}' --write
+npx eslint '**/*.js' --fix
+npx solhint 'contracts/**/*.sol' --fix
 ```
+
+To run slither
 `docker run -it -v /home/share:/share trailofbits/eth-security-toolbox`
