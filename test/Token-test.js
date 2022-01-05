@@ -1,6 +1,10 @@
 const { expect } = require("chai");
 const { ethers, solidity } = require("hardhat");
 
+const crypto = require("crypto");
+const keccak256 = require("keccak256");
+const { MerkleTree } = require("merkletreejs");
+
 describe("DonkeVerse", function () {
   let DonkeVerseContract = null;
   let owner = null;
@@ -22,85 +26,66 @@ describe("DonkeVerse", function () {
     });
   });
 
-  describe("isAllowedToPublicMint", async function () {
-    it("should return true if signature is valid", async function () {
-      const privateKeyWhitelist =
-        "0x0123456789012345678901234567890123456789012345678901234567890123";
-      const privateKeyCustomer =
-        "0xA123456789012345678901234567890123456789012345678901234567890123";
+ 
+  xdescribe("presale", async function () {
+    it("should allow whitelisted person to mint", async function () {
+      addresses = [];
+      for (i = 0; i < 5000; i++) {
+        const id = crypto.randomBytes(32).toString("hex");
+        const privateKey = "0x" + id;
+        const wallet = new ethers.Wallet(privateKey);
+        addresses.push(wallet.address);
+      }
 
-      const wallet = new ethers.Wallet(privateKeyWhitelist);
-      const walletCustomer = new ethers.Wallet(privateKeyCustomer);
+      addresses.push(addr1.address);
 
-      await DonkeVerseContract.setPublicMintAddress(wallet.address);
+      addresses = addresses
+        .map((value) => ({ value, sort: Math.random() }))
+        .sort((a, b) => a.sort - b.sort)
+        .map(({ value }) => value);
 
-      const signature = wallet.signMessage(
-        ethers.utils.arrayify(
-          ethers.utils.solidityKeccak256(["bytes"], [walletCustomer.address])
-        )
-      );
-      expect(
-        await DonkeVerseContract.isAllowedToPublicMint(
-          walletCustomer.address,
-          signature
-        )
-      ).to.equal(true);
-    });
+      const merkleTree = new MerkleTree(addresses, keccak256, {
+        hashLeaves: true,
+        sortPairs: true,
+      });
+      const root = merkleTree.getHexRoot();
+      const proof = merkleTree.getHexProof(keccak256(addr1.address));
 
-    it("should return false if signature is not valid", async function () {
-      const privateKeyWhitelist =
-        "0x0123456789012345678901234567890123456789012345678901234567890123";
-      const privateKeyCustomer =
-        "0xA123456789012345678901234567890123456789012345678901234567890123";
-      const privateKeyPoser =
-        "0x1111111111111111111111111111111111111111111111111111111111111111";
+      await DonkeVerseContract.setWhitelist(addresses);
 
-      const wallet = new ethers.Wallet(privateKeyWhitelist);
-      const walletCustomer = new ethers.Wallet(privateKeyCustomer);
-      const walletPoser = new ethers.Wallet(privateKeyPoser);
+      await DonkeVerseContract.connect(addr1).presale(proof, 0, {
+        value: ethers.utils.parseEther("0.07"),
+      });
 
-      await DonkeVerseContract.setPublicMintAddress(wallet.address);
-
-      const signature = wallet.signMessage(
-        ethers.utils.arrayify(
-          ethers.utils.solidityKeccak256(["bytes"], [walletPoser.address])
-        )
-      );
-      expect(
-        await DonkeVerseContract.isAllowedToPublicMint(
-          walletCustomer.address,
-          signature
-        )
-      ).to.equal(false);
+      expect(await DonkeVerseContract.ownerOf(0)).to.be.equal(addr1.address);
     });
   });
 
   describe("publicMint", async function () {
     signingWallet = null;
     function signAddress(wallet, customer) {
-      let addressNum = ethers.BigNumber.from(ethers.utils.hexZeroPad(customer, 32))
       return wallet.signMessage(
         ethers.utils.arrayify(
-          ethers.utils.defaultAbiCoder.encode(["bytes32"], 
-                                              [ethers.utils.defaultAbiCoder.encode(["address"], [customer])])
+          ethers.utils.defaultAbiCoder.encode(
+            ["bytes32"],
+            [ethers.utils.defaultAbiCoder.encode(["address"], [customer])]
+          )
         )
-        
-        //ethers.utils.arrayify(
-        //  ethers.utils.solidityKeccak256(["bytes"], [customer])
-        //)
       );
     }
 
     beforeEach(async function () {
       const privateKeyWhitelist =
         "0x0123456789012345678901234567890123456789012345678901234567890123";
-      signingWallet = new ethers.Wallet(privateKeyWhitelist);
-      await DonkeVerseContract.setPublicMintAddress(signingWallet.address);
+      // signingWallet = addr1.privateKey
+      signingWallet = addr1;
+
+      await DonkeVerseContract.setPublicMintAddress(addr1.address);
     });
 
     it("should reject non-whitelisted user with nonsense signature when public minting is not open", async function () {
       await expect(
-        DonkeVerseContract.publicMint("0x123abc", 1)
+        DonkeVerseContract.publicMint("0x123abc")
       ).to.be.revertedWith("ECDSA: invalid signature length");
     });
 
@@ -108,63 +93,43 @@ describe("DonkeVerse", function () {
       const signature = signAddress(signingWallet, addr1.address);
       await expect(
         DonkeVerseContract.connect(addr2).publicMint(
-          "0xf15658ed1ec8799e6e3644a3d21240c5aebc48a347fdbf8b3a62c9e1a8b4189c0b7ffcbd3eb664de69bc12e916a96f8e67159b549348690b0b52d4e501f380e81b",
-          1
+          "0xf15658ed1ec8799e6e3644a3d21240c5aebc48a347fdbf8b3a62c9e1a8b4189c0b7ffcbd3eb664de69bc12e916a96f8e67159b549348690b0b52d4e501f380e81b"
         )
       ).to.be.revertedWith("not allowed");
     });
 
-    it.only("should allow whitelisted users to mint if they pay enough ether", async function () {
-      const signature1 = signAddress(signingWallet, addr1.address);
-      console.log(signature1)
+    it("should allow whitelisted users to mint if they pay enough ether", async function () {
+      const signature1 = await signAddress(signingWallet, addr1.address);
+
       expect(
         await DonkeVerseContract.connect(addr1).publicMint(signature1, {
-          value: ethers.utils.parseEther("0.07"),
+          value: ethers.utils.parseEther("0.06"),
         })
       );
       expect(await DonkeVerseContract.ownerOf(1)).to.be.equal(addr1.address);
 
       expect(
         await DonkeVerseContract.connect(addr1).publicMint(signature1, {
-          value: ethers.utils.parseEther("0.07"),
+          value: ethers.utils.parseEther("0.06"),
         })
       );
       expect(await DonkeVerseContract.ownerOf(2)).to.be.equal(addr1.address);
     });
 
-    it("should allow non-whitelisted user to mint if public minting is allowed", async function () {
-      await DonkeVerseContract.togglePublicMinting();
-      expect(
-        await DonkeVerseContract.connect(addr1).publicMint("0x00", 1, {
-          value: ethers.utils.parseEther("0.07"),
-        })
-      );
-      expect(await DonkeVerseContract.ownerOf(0)).to.be.equal(addr1.address);
-    });
-
     it("should reject transactions below 0.07 ether", async function () {
       const signature1 = signAddress(signingWallet, addr1.address);
       await expect(
-        DonkeVerseContract.connect(addr1).publicMint(signature1, 1, {
+        DonkeVerseContract.connect(addr1).publicMint(signature1, {
           value: ethers.utils.parseEther("0.069"),
         })
-      ).to.be.revertedWith("price too low");
+      ).to.be.revertedWith("wrong price");
     });
 
-    it("should reject transactions that mint too many pieces", async function () {
-      const signature1 = signAddress(signingWallet, addr1.address);
-      await expect(
-        DonkeVerseContract.connect(addr1).publicMint(signature1, 6, {
-          value: ethers.utils.parseEther("0.07"),
-        })
-      ).to.be.revertedWith("quantity too big");
-    });
-
-    it("should allow priviledged users extra mints", async function () {
-      await DonkeVerseContract.setDefaultMaxMintsPerUser(addr1.address, 6);
+    xit("should allow priviledged users extra mints", async function () {
+      await DonkeVerseContract.setExtraMintsForAddress(addr1.address, 6);
       const signature1 = signAddress(signingWallet, addr1.address);
       expect(
-        await DonkeVerseContract.connect(addr1).publicMint(signature1, 6, {
+        await DonkeVerseContract.connect(addr1).publicMint(signature1, {
           value: ethers.utils.parseEther("0.07"),
         })
       );
@@ -175,7 +140,7 @@ describe("DonkeVerse", function () {
 
     xit("should not exceed total supply", async function () {
       this.timeout(60 * 1000);
-      await DonkeVerseContract.setDefaultMaxMintsPerUser(
+      await DonkeVerseContract.setExtraMintsForAddress(
         addr1.address,
         10000 - 1
       );
@@ -211,7 +176,10 @@ describe("DonkeVerse", function () {
     function signAddress(wallet, customer) {
       return wallet.signMessage(
         ethers.utils.arrayify(
-          ethers.utils.solidityKeccak256(["bytes"], [customer])
+          ethers.utils.defaultAbiCoder.encode(
+            ["bytes32"],
+            [ethers.utils.defaultAbiCoder.encode(["address"], [customer])]
+          )
         )
       );
     }
@@ -223,12 +191,10 @@ describe("DonkeVerse", function () {
       await DonkeVerseContract.setPrivateMintAddress(signingWallet.address);
     });
 
-    it("should accept giftListed addresses", async function () {
+    it("should only accept owner", async function () {
       const signature1 = signAddress(signingWallet, addr1.address);
-      expect(
-        await DonkeVerseContract.connect(addr1).privateMint(signature1, 1)
-      );
-      expect(await DonkeVerseContract.ownerOf(0)).to.be.equal(addr1.address);
+      await expect(DonkeVerseContract.connect(addr1).privateMint(signature1, 2))
+      .to.be.revertedWith('Ownable: caller is not the owner');
     });
 
     it("should reject alternative signatures", async function () {
@@ -237,15 +203,8 @@ describe("DonkeVerse", function () {
       otherWallet = new ethers.Wallet(privateKeyOtherWallet);
       const fakeSignature = signAddress(otherWallet, addr1.address);
       await expect(
-        DonkeVerseContract.connect(addr2).privateMint(fakeSignature, 1)
-      ).to.be.revertedWith("not eligible");
-    });
-
-    it("should valid signatures with the wrong address", async function () {
-      const signature1 = signAddress(signingWallet, addr2.address);
-      await expect(
-        DonkeVerseContract.connect(addr1).privateMint(signature1, 1)
-      ).to.be.revertedWith("not eligible");
+        DonkeVerseContract.connect(owner).privateMint(fakeSignature, 2)
+      ).to.be.revertedWith("not allowed");
     });
   });
 
@@ -269,42 +228,12 @@ describe("DonkeVerse", function () {
   });
 
   describe("administrative functions", async function () {
-    describe("reveal", async function() {
-      it("should require an input of 32 as a speedbump", async function() {
-        await expect(DonkeVerseContract.reveal(33)).to.be.revertedWith('be careful');
-      });
-    })
-    describe("setPrice", async function () {
-      it("should only be changeable by the owner", async function () {
-        await expect(
-          DonkeVerseContract.connect(addr1).setPrice(0)
-        ).to.be.revertedWith("Ownable: caller is not the owner");
-      });
-      it("should set a new price", async function () {
-        DonkeVerseContract.setPrice(ethers.utils.parseEther("1.0"));
-        expect(await DonkeVerseContract.price()).to.be.equal(
-          ethers.utils.parseEther("1.0")
+    describe("reveal", async function () {
+      it("should require an input of 32 as a speedbump", async function () {
+        await expect(DonkeVerseContract.reveal(33)).to.be.revertedWith(
+          "be careful"
         );
       });
-    });
-
-    describe("setDefaultMaxMintsPerUser", async function () {
-      it("should only be changeable by the owner", async function () {
-        await expect(
-          DonkeVerseContract.connect(addr1).setDefaultMaxMintsPerUser(
-            addr1.address,
-            0
-          )
-        ).to.be.revertedWith("Ownable: caller is not the owner");
-      });
-
-      it("should pass the idiot test", async function () {
-        await expect(
-          DonkeVerseContract.setDefaultMaxMintsPerUser(addr1.address, 10001)
-        ).to.be.revertedWith("too high");
-      });
-
-      it("should set a new default maximum mint for a user");
     });
 
     describe("setPublicMintAddress", async function () {
@@ -321,11 +250,12 @@ describe("DonkeVerse", function () {
           "0x0123456789012345678901234567890123456789012345678901234567890123";
         const wallet = new ethers.Wallet(privateKey);
 
-        expect(await DonkeVerseContract.publicMintingAddress()).to.equal(
-          ethers.constants.AddressZero
+        expect(await DonkeVerseContract.getPublicMintingAddress()).to.equal(
+          ethers.utils.getAddress("0x0000000000000000000000000000000000000001")
         );
+
         await DonkeVerseContract.setPublicMintAddress(wallet.address);
-        expect(await DonkeVerseContract.publicMintingAddress()).to.equal(
+        expect(await DonkeVerseContract.getPublicMintingAddress()).to.equal(
           wallet.address
         );
       });
@@ -342,9 +272,11 @@ describe("DonkeVerse", function () {
           "be careful"
         );
       });
-      it("should update foreverLock", async function () {
-        DonkeVerseContract.setForeverLock(50);
-        expect(await DonkeVerseContract.foreverLocked()).to.be.equal(1);
+      it("should reject if max supply is not reached", async function () {
+        await expect(DonkeVerseContract.setForeverLock(50)).to.be.revertedWith(
+          "cannot lock"
+        );
+        expect(await DonkeVerseContract.foreverLocked()).to.be.equal(0);
       });
     });
 
@@ -357,16 +289,16 @@ describe("DonkeVerse", function () {
         ).to.be.reverted;
       });
 
-      it("should set the public key for gifting", async function () {
+      it("should set the private key for gifting", async function () {
         const privateKey =
           "0xBB23456789012345678901234567890123456789012345678901234567890123";
         const wallet = new ethers.Wallet(privateKey);
 
-        expect(await DonkeVerseContract.privateMintingAddress()).to.equal(
-          ethers.constants.AddressZero
+        expect(await DonkeVerseContract.getPrivateMintingAddress()).to.equal(
+          ethers.utils.getAddress("0x0000000000000000000000000000000000000001")
         );
         await DonkeVerseContract.setPrivateMintAddress(wallet.address);
-        expect(await DonkeVerseContract.privateMintingAddress()).to.equal(
+        expect(await DonkeVerseContract.getPrivateMintingAddress()).to.equal(
           wallet.address
         );
       });
@@ -392,9 +324,12 @@ describe("DonkeVerse", function () {
       });
 
       it("should reject high royalty", async function () {
-        await expect(DonkeVerseContract.setRoyaltyBasisPoints(5001)).to.be.revertedWith('invalid royalty');
+        await expect(
+          DonkeVerseContract.setRoyaltyBasisPoints(5001)
+        ).to.be.revertedWith("invalid royalty");
         expect(await DonkeVerseContract.royaltyBasisPoints()).to.be.equal(
-          new ethers.BigNumber.from(900));
+          new ethers.BigNumber.from(500)
+        );
       });
 
       it("only owner", async function () {
@@ -406,20 +341,25 @@ describe("DonkeVerse", function () {
 
     describe("receiveResults", async function () {
       it("should receive values", async function () {
-        const toUpload = Array.from(Array(10000).keys()).reverse();
-        for (i = 0; i < 10000; i += 2000) {
+        this.timeout(30 * 1000);
+        const toUpload = Array.from(Array(7778).keys()).reverse();
+        for (i = 0; i < 6000; i += 2000) {
           await DonkeVerseContract.receiveValues(
             toUpload.slice(i, i + 2000),
             i
           );
         }
 
+        await DonkeVerseContract.receiveValues(
+          toUpload.slice(6000, 7778), 6000
+        );
+
         expect(await DonkeVerseContract.getNftToImageMapping()).to.eql(
           toUpload
         );
       });
 
-      it("should block if ForeverLock is set", async function () {
+      xit("should block if ForeverLock is set", async function () {
         await DonkeVerseContract.setForeverLock(50);
         await expect(
           DonkeVerseContract.receiveValues([5], 0)
@@ -430,14 +370,14 @@ describe("DonkeVerse", function () {
     });
   });
 
-  xdescribe("referenceShuffle", async function () {
+  describe("referenceShuffle", async function () {
     function referenceShuffle(seed, _totalSupply) {
       const mapping = [];
       for (let i = 0; i < _totalSupply; i++) {
         mapping.push(i);
       }
       let randomState256 = new ethers.BigNumber.from(seed);
-      for (let i = _totalSupply - 1; i > 0; i--) {
+      for (let i = _totalSupply - 1; i > 1; i--) {
         randomState256 = new ethers.BigNumber.from(
           ethers.utils.solidityKeccak256(["uint"], [randomState256])
         );
@@ -448,16 +388,19 @@ describe("DonkeVerse", function () {
     }
 
     it("should match javascript ipmementation", async function () {
+      console.log("Please be patient, this will take a minute")
       this.timeout(60 * 1000);
-      const randomSeed = new ethers.BigNumber.from(
-        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
-      );
-      const referenceShuffleResult = referenceShuffle(100, 10000);
+      //const randomSeed = new ethers.BigNumber.from(
+      //  "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      //);
+      const referenceShuffleResult = referenceShuffle(100, 7778);
       const contractShuffleResult = await DonkeVerseContract.referenceShuffle(
         100
       );
       expect(referenceShuffleResult).to.be.eql(contractShuffleResult);
     });
+
+
   });
 
   describe("withdraw", async function () {
@@ -490,12 +433,12 @@ describe("DonkeVerse", function () {
     it("should return 10% of sale price for mintable", async function () {
       const result = await DonkeVerseContract.royaltyInfo(2, 100);
       expect(result.receiver).to.be.equal(owner.address);
-      expect(result.royaltyAmount).to.be.equal(9);
+      expect(result.royaltyAmount).to.be.equal(5);
     });
 
     it("should return 900 basis points for rarible", async function () {
       expect(await DonkeVerseContract.getFeeBps(21)).to.be.eql([
-        new ethers.BigNumber.from(900),
+        new ethers.BigNumber.from(500),
       ]);
     });
 

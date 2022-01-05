@@ -1,0 +1,19 @@
+1. Gas will be measured by hardhat 2.6.8
+2. You must use Solidity 8.10
+3. You may use whatever optimizations on the Solidity compiler you like as long as it is known to be secure
+4. You must use this account for signing (second in Hardhat)
+Account #1: 0x70997970c51812dc3a010c7d01b50e0d17dc79c8
+Private Key: 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+5. Assembly is allowed if you can demonstrate it is secure
+6. Using loops to fulfill ERC721 functionality are not accepted
+7. Wallets cannot hold more than two pieces
+8. Total supply is 7777
+9. Price is 0.06 ether
+10. Alternatives to public signature whitelisting will be considered, but it must be secure
+11. There must be no security bugs
+12. There are two known improvements we have not shared. If you discover them first, you get a whitelist for each of the two. If nobody can improve on our gas cost, you will be upgraded to a free mint.
+13. To be considered for a free mint, you must present a solution that is better than 80,767 gas OR be the first to find one of the two hidden solutions AND no-one else finds an improvement.
+14. Cryptographic solutions must follow best practices. Recovering signatures from ECDSA must be from hashes. Signed messages must be salted according to EIP191.
+15. We reserve the right to make the final decision about what solutions are accepted. We reserve the right to reward innovative solutions at our discretion.
+16. Solutions must be submitted before January 18 Midnight UTC to allow time to be incorporated into the audit.
+17. We will pay the gas for people who recieve a free mint.
