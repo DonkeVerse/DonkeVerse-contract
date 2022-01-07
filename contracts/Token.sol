@@ -196,7 +196,7 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
     }
 
     function claimTicketOrRevertIfClaimed(uint256 ticketNumber) private {
-        require(ticketNumber < NUMBER_OF_GROUPS * 256, "haxx0r ~(c001)");
+        require(ticketNumber < NUMBER_OF_GROUPS * 256, "bad ticket");
         uint256 storageOffset;
         uint256 offsetWithin256;
         uint256 localGroup;
@@ -233,20 +233,19 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
                     keccak256(
                         abi.encodePacked(
                             "\x19Ethereum Signed Message:\n32",
-                            bytes32(abi.encode(msg.sender, ticketNumbers[i]))
+                            bytes32(abi.encode(msg.sender, "+", ticketNumbers[i]))
                         )
                     ).recover(_signatureAddressAndTicketNumbers[i]),
                 "not allowed"
             );
             claimTicketOrRevertIfClaimed(ticketNumbers[i]); // we have to check the ticket numbers one by one
-            // require(msg.sender == tx.origin); not needed because each mint requires a ticket
-            
+
             _mint(msg.sender, _nextTokenIndex);
             unchecked {
                 _nextTokenIndex++;
             }           
         }
-        nextTokenIndex = _nextTokenIndex; 
+        nextTokenIndex = _nextTokenIndex;
     }
 
     // https://medium.com/donkeverse/hardcore-gas-savings-in-nft-minting-part-1-16c66a88c56a
