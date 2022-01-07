@@ -14,7 +14,7 @@ import "./@rarible/royalties/contracts/LibRoyaltiesV1.sol";
 // implement pausable for trading (to prevent sniping)
 // add back the hidden gas savings
 // implement burnable
-// set variable token distribution for mods and volunteers
+// check status of ticket claim
 // move ERC2981 to its own interface/contract
 contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
     using ECDSA for bytes32;
@@ -213,7 +213,7 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
         }
  
         storedBit = (localGroup >> offsetWithin256) & uint256(1);
-        require(storedBit == 1, "already taken");
+        require(storedBit == 1, "already claimed");
         localGroup = localGroup & ~(uint256(1) << offsetWithin256);
 
         //solhint-disable-next-line no-inline-assembly
@@ -233,7 +233,7 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
                     keccak256(
                         abi.encodePacked(
                             "\x19Ethereum Signed Message:\n32",
-                            bytes32(abi.encode(msg.sender, "+", ticketNumbers[i]))
+                            bytes32(abi.encodePacked(msg.sender, "+", ticketNumbers[i]))
                         )
                     ).recover(_signatureAddressAndTicketNumbers[i]),
                 "not allowed"
