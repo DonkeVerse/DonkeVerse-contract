@@ -20,11 +20,32 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
     using ECDSA for bytes32;
     using Strings for uint256;
 
+    // for tracking if a person has claimed their ticket on the presale
+    uint256 private constant MAX_INT = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+    uint256 private group00 = MAX_INT;
+    uint256 private group01 = MAX_INT;
+    uint256 private group02 = MAX_INT;
+    uint256 private group03 = MAX_INT;
+    uint256 private group04 = MAX_INT;
+    uint256 private group05 = MAX_INT;
+    uint256 private group06 = MAX_INT;
+    uint256 private group07 = MAX_INT;
+    uint256 private group08 = MAX_INT;
+    uint256 private group09 = MAX_INT;
+    uint256 private group10 = MAX_INT;
+    uint256 private group11 = MAX_INT;
+    uint256 private group12 = MAX_INT;
+    uint256 private group13 = MAX_INT;
+    uint256 private group14 = MAX_INT;
+    uint256 private group15 = MAX_INT;
+    uint256 private group16 = MAX_INT;
+    uint256 private constant NUMBER_OF_GROUPS = 17;
+
     uint256 private nextTokenIndex = 1;
     uint256 public verifiedRandomResult;
     bytes32 public randomnessRequestId;
 
-    // ID goes [1,7777] so the total supply is 7777. 
+    // ID goes [1,7777] so the total supply is 7777.
     uint32 private constant MAX_TOKEN_SUPPLY = 7778;
     uint32 private isRevealed = 0;
     uint32 public foreverLocked = 0;
@@ -174,6 +195,60 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
         nextTokenIndex = _nextTokenIndex;
     }
 
+    function claimTicketOrRevertIfClaimed(uint256 ticketNumber) private {
+        require(ticketNumber < NUMBER_OF_GROUPS * 256, "haxx0r ~(c001)");
+        uint256 storageOffset;
+        uint256 offsetWithin256;
+        uint256 localGroup;
+        uint256 storedBit;
+        unchecked {
+            storageOffset = ticketNumber / 256;
+            offsetWithin256 = ticketNumber % 256;
+        }
+        
+        //solhint-disable-next-line no-inline-assembly
+        assembly {
+            storageOffset := add(group00.slot, storageOffset)
+            localGroup := sload(storageOffset)
+        }
+ 
+        storedBit = (localGroup >> offsetWithin256) & uint256(1);
+        require(storedBit == 1, "already taken");
+        localGroup = localGroup & ~(uint256(1) << offsetWithin256);
+
+        //solhint-disable-next-line no-inline-assembly
+        assembly {
+            sstore(storageOffset, localGroup)
+        }
+    }
+
+    function presale(bytes[] calldata _signatureAddressAndTicketNumbers, uint256[] calldata ticketNumbers) external payable {
+        uint256 _nextTokenIndex = nextTokenIndex; // uint256 private nextTokenIndex = 1;
+        require(_nextTokenIndex + ticketNumbers.length < MAX_TOKEN_SUPPLY, "max supply"); // because 7778 - 1 = 7777
+        require(msg.value == (0.06 ether) * ticketNumbers.length, "wrong price");
+
+        for (uint256 i = 0; i < ticketNumbers.length; i++) {
+            require(
+                publicMintingAddress ==
+                    keccak256(
+                        abi.encodePacked(
+                            "\x19Ethereum Signed Message:\n32",
+                            bytes32(abi.encode(msg.sender, ticketNumbers[i]))
+                        )
+                    ).recover(_signatureAddressAndTicketNumbers[i]),
+                "not allowed"
+            );
+            claimTicketOrRevertIfClaimed(ticketNumbers[i]); // we have to check the ticket numbers one by one
+            // require(msg.sender == tx.origin); not needed because each mint requires a ticket
+            
+            _mint(msg.sender, _nextTokenIndex);
+            unchecked {
+                _nextTokenIndex++;
+            }           
+        }
+        nextTokenIndex = _nextTokenIndex; 
+    }
+
     // https://medium.com/donkeverse/hardcore-gas-savings-in-nft-minting-part-1-16c66a88c56a
     // https://medium.com/donkeverse/hardcore-gas-savings-in-nft-minting-part-2-signatures-vs-merkle-trees-917c43c59b07
     // https://github.com/DonkeVerse/GasContest
@@ -191,12 +266,22 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
             "not allowed"
         );
         require(msg.value == 0.06 ether, "wrong price");
+
+        // someone could try to mint and transfer away the NFT in 
+        // the same transaction which defeats balanceOf if they 
+        // use a smart contract. This prevents that. We don't try 
+        // to prevent people from transfering and then minting again 
+        // because they can use another wallet in parallel anyway
+        // solhint-disable-next-line avoid-tx-origin
+        require(msg.sender == tx.origin, "no bots");
         require(balanceOf(msg.sender) < 2, "too many");
+
         _mint(msg.sender, _nextTokenIndex);
         unchecked {
             _nextTokenIndex++;
         }
         nextTokenIndex = _nextTokenIndex;
+
     }
 
     // functions for users to get information

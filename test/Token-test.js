@@ -406,21 +406,21 @@ describe("DonkeVerse", function () {
 
   describe("supportsInterface", async function () {
     it("should support raribleV1", async function () {
-      expect(
-        await DonkeVerseContract.supportsInterface("0xb7799584")
-      ).to.equal(true);
+      expect(await DonkeVerseContract.supportsInterface("0xb7799584")).to.equal(
+        true
+      );
     });
 
     it("should support ERC2981", async function () {
-      expect(
-        await DonkeVerseContract.supportsInterface("0x2a55205a")
-      ).to.equal(true);
+      expect(await DonkeVerseContract.supportsInterface("0x2a55205a")).to.equal(
+        true
+      );
     });
 
     it("should support ERC721", async function () {
-      expect(
-        await DonkeVerseContract.supportsInterface("0x80ac58cd")
-      ).to.equal(true);
+      expect(await DonkeVerseContract.supportsInterface("0x80ac58cd")).to.equal(
+        true
+      );
     });
   });
 });
