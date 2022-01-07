@@ -195,6 +195,13 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
         nextTokenIndex = _nextTokenIndex;
     }
 
+    // This will save ~15,000 gas compared to a mapping because most
+    // users will mint one token and their mapping will go from 0 to 1
+    // and cost 20,000 gas. Also, a few lucky users will get gas refunded
+    // when they set their storage slot to zero. For anyone copying this,
+    // please be 100% sure you understand the assembly code and its
+    // relation to storage layout or you could have some really bad
+    // security bugs.
     function claimTicketOrRevertIfClaimed(uint256 ticketNumber) private {
         require(ticketNumber < NUMBER_OF_GROUPS * 256, "bad ticket");
         uint256 storageOffset;
