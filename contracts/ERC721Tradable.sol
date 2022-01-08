@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "./common/meta-transactions/ContentMixin.sol";
@@ -25,7 +25,7 @@ contract ProxyRegistry {
  * ERC721Tradable - ERC721 contract that whitelists a trading address, and has minting functionality.
  */
 abstract contract ERC721Tradable is
-    ERC721,
+    ERC721Pausable,
     ContextMixin,
     NativeMetaTransaction,
     Ownable

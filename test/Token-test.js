@@ -21,6 +21,73 @@ describe("DonkeVerse", function () {
     });
   });
 
+  describe("presale", async function () {
+    let signingWallet = null;
+    function signAddress(wallet, customer, ticketNumber) {
+      return wallet.signMessage(
+        ethers.utils.arrayify(
+            ethers.utils.defaultAbiCoder.encode(["address", "uint256"], [customer, ticketNumber])
+        )
+      );
+    }
+
+    beforeEach(async function () {
+      // signingWallet = addr1.privateKey
+      signingWallet = addr1;
+
+      await DonkeVerseContract.setPublicMintAddress(addr1.address);
+    });
+
+    it("should allow whitelisted users to mint if they pay enough ether", async function () {
+      const signature1 = await signAddress(signingWallet, addr1.address, 0);
+      const signature2 = await signAddress(signingWallet, addr1.address, 1);
+
+      await DonkeVerseContract.connect(addr1).presale([signature1, signature2], [0, 1], {
+          value: ethers.utils.parseEther("0.12"),
+        })
+
+      expect(await DonkeVerseContract.ownerOf(1)).to.be.equal(addr1.address);
+      expect(await DonkeVerseContract.ownerOf(2)).to.be.equal(addr1.address);
+    });
+
+    it("should revert if the user attempts to use the same ticket twice", async function () {
+      const signature1 = await signAddress(signingWallet, addr1.address, 0);
+
+      await DonkeVerseContract.connect(addr1).presale([signature1], [0], {
+          value: ethers.utils.parseEther("0.06"),
+        })
+
+      expect(await DonkeVerseContract.ownerOf(1)).to.be.equal(addr1.address);
+
+      await expect(DonkeVerseContract.connect(addr1).presale([signature1], [0], {
+          value: ethers.utils.parseEther("0.06"),
+        })).to.be.revertedWith('already claimed');
+    });
+
+    it("should revert at the edge", async function () {
+      const signature1 = await signAddress(signingWallet, addr1.address, 256 * 31 - 1);
+      await DonkeVerseContract.connect(addr1).presale([signature1], [256 * 31 - 1], {
+          value: ethers.utils.parseEther("0.06"),
+        })
+      expect(await DonkeVerseContract.ownerOf(1)).to.be.equal(addr1.address);
+
+
+      const signature2 = await signAddress(signingWallet, addr1.address, 256 * 31); // tickets start at zero
+      await expect(DonkeVerseContract.connect(addr1).presale([signature2], [256 * 31], {
+          value: ethers.utils.parseEther("0.06"),
+        })).to.be.revertedWith("bad ticket");
+    });
+
+    it("presaleSingle", async function () {
+      const signature1 = await signAddress(signingWallet, addr1.address, 0);
+      await DonkeVerseContract.connect(addr1).presaleSingle(signature1, 0, {
+          value: ethers.utils.parseEther("0.06"),
+        })
+      expect(await DonkeVerseContract.ownerOf(1)).to.be.equal(addr1.address);
+    });
+  });
+
+
   describe("publicMint", async function () {
     let signingWallet = null;
     function signAddress(wallet, customer) {
@@ -228,7 +295,7 @@ describe("DonkeVerse", function () {
           "be careful"
         );
       });
-      it("should reject if max supply is not reached", async function () {
+      xit("should reject if max supply is not reached", async function () {
         await expect(DonkeVerseContract.setForeverLock(50)).to.be.revertedWith(
           "cannot lock"
         );

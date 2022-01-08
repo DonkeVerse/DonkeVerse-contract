@@ -11,16 +11,18 @@ import "./@rarible/royalties/contracts/LibRoyaltiesV1.sol";
 
 
 // TODO
-// implement pausable for trading (to prevent sniping)
 // add back the hidden gas savings
-// implement burnable
-// check status of ticket claim
-// move ERC2981 to its own interface/contract
 contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
     using ECDSA for bytes32;
     using Strings for uint256;
 
     // for tracking if a person has claimed their ticket on the presale
+    // this is more gas efficient than an array even though the memory layout
+    // is the same. Each bit is a ticket, and to claim the ticket, the user's
+    // address and ticket number are signed by the private key of 
+    // publicMintingAddress. When the ticket is claimed, the bit is set to zero
+    // This will handle up to 256 * 31 = 7936 presale tickets
+    // which is enough for the whole collection (7777)
     uint256 private constant MAX_INT = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
     uint256 private group00 = MAX_INT;
     uint256 private group01 = MAX_INT;
@@ -39,21 +41,39 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
     uint256 private group14 = MAX_INT;
     uint256 private group15 = MAX_INT;
     uint256 private group16 = MAX_INT;
-    uint256 private constant NUMBER_OF_GROUPS = 17;
+    uint256 private group17 = MAX_INT;
+    uint256 private group18 = MAX_INT;
+    uint256 private group19 = MAX_INT;
+    uint256 private group20 = MAX_INT;
+    uint256 private group21 = MAX_INT;
+    uint256 private group22 = MAX_INT;
+    uint256 private group23 = MAX_INT;
+    uint256 private group24 = MAX_INT;
+    uint256 private group25 = MAX_INT;
+    uint256 private group26 = MAX_INT;
+    uint256 private group27 = MAX_INT;
+    uint256 private group28 = MAX_INT;
+    uint256 private group29 = MAX_INT;
+    uint256 private group30 = MAX_INT;
+    uint256 private constant NUMBER_OF_GROUPS = 31;
 
-    uint256 private nextTokenIndex = 1;
+    // nextTokenIndex doesn't go past 7777 but it's more gas efficient than uint32 while minting
+    uint256 public nextTokenIndex = 1;
     uint256 public verifiedRandomResult;
     bytes32 public randomnessRequestId;
 
     // ID goes [1,7777] so the total supply is 7777.
-    uint32 private constant MAX_TOKEN_SUPPLY = 7778;
-    uint32 private isRevealed = 0;
+    uint32 public constant MAX_TOKEN_SUPPLY = 7778;
+    uint32 public isRevealed = 0; //whether to return the placeholder or revealed id
     uint32 public foreverLocked = 0;
+    uint32 public burningEnabled = 0;
     uint32 public numberOfTimesRandomNumberGeneratorCalled = 0;
     uint32 public royaltyBasisPoints = 500;
 
     // https://eips.ethereum.org/EIPS/eip-2981
     bytes4 private constant _INTERFACE_ID_ERC2981 = 0x2a55205a;
+
+    uint256 timePaused;
 
     // the result of the shuffle will be stored here.
     uint16[MAX_TOKEN_SUPPLY] public nftToImageMapping;
@@ -63,9 +83,12 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
     address public publicMintingAddress = address(1);
     address private privateMintingAddress = address(1);
 
-    // allows specific addresses to go over the limit
-    mapping(address => uint256) public extraMintsForAddress;
+    // used for unpausing the contract if something bad happens
+    // to me while the contract is pause
+    address private backup1;
+    address private backup2;
 
+    // =========================== CHANGE IN PROD ===========================
     // CHANGE IN PROD - Chainlink Integration
     address private constant VRF_COORDINATOR =
         0xb3dCcb4Cf7a26f6cf6B120Cf5A73875B7BBc655B; // RINKEBY CHANGE IN PROD
@@ -78,9 +101,12 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
         0xF57B2c51dED3A29e6891aba85459d600256Cf317; // RINKEBY CHANGE IN PROD
 
     // CHANGE IN PROD - Metadata
-    string public constant COLLECTION_NAME = "Collection Name 922";
+    string public constant COLLECTION_NAME = "Collection 922";
     string public constant BASE_URI = "https://www.example.com/metadata/";
     string public constant PLACEHOLDER = "placeholder"; // NO JSON EXTENSION
+    // ========================= END CHANGE IN PROD =========================
+
+    uint256 private constant SIX_HOURS = 6 * 60 * 6;
 
     // these events allow people to track if we called the number 
     // generator more than once. We leave that as an option because 
@@ -105,12 +131,43 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
         isRevealed = 1;
     }
 
+    function setBackupAddresses(address _address1, address _address2) external onlyOwner {
+        require(_address1 != address(0) && _address2 != address(0), "zero address");
+        backup1 = _address1;
+        backup2 = _address2;
+    }
+
+    function pause() external onlyOwner {
+        require(foreverLocked == 0, "foreverLocked");
+        require(backup1 != address(0) && backup2 != address(0));
+        require(!paused(), "already paused");
+        timePaused = block.timestamp;
+        _pause();
+    }
+
+    function unpause() external {
+        // We add a backup addresses because we want to be 100% sure we never leave the contract paused.
+        // If OpenSea takes an unusually long time to update the metadata, we will just pause again
+        // before the six hours is up to prevent snipers from unpausing and sniping.
+        require(msg.sender == owner() || msg.sender == backup1
+                                      || msg.sender == backup2
+                                      || block.timestamp > timePaused + SIX_HOURS);
+        _unpause();
+    }
+
     // setForeverLock can't be undone, so metadata is safe even if 
     // the private keys are stolen
     function setForeverLock(uint256 _protection) external onlyOwner {
         require(_protection == 50, "be careful");
-        require(nextTokenIndex == MAX_TOKEN_SUPPLY, "cannot lock");
+        require(nextTokenIndex == MAX_TOKEN_SUPPLY, "supply not reached");
+        require(!paused(), "paused contract");
         foreverLocked = 1;
+    }
+
+    // we could have more than 7777 mints in the logs if someone
+    // burns before the total supply is reached, so we disable burning
+    function flipBurningEnabled() external onlyOwner {
+        burningEnabled = 1 - burningEnabled;
     }
 
     // this function has a foreverLock because we don't want the values 
@@ -229,6 +286,31 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
         }
     }
 
+    function presaleSingle(bytes calldata _signatureAddressAndTicketNumber, uint256 ticketNumber) external payable {
+        uint256 _nextTokenIndex = nextTokenIndex; // uint256 private nextTokenIndex = 1;
+        require(_nextTokenIndex + 1 < MAX_TOKEN_SUPPLY, "max supply"); // because 7778 - 1 = 7777
+        require(msg.value == 0.06 ether, "wrong price");
+
+        require(
+            publicMintingAddress ==
+                keccak256(
+                    abi.encodePacked(
+                        "\x19Ethereum Signed Message:\n64",
+                        abi.encode(msg.sender, ticketNumber)
+                    )
+                ).recover(_signatureAddressAndTicketNumber),
+            "not allowed"
+
+        );
+        claimTicketOrRevertIfClaimed(ticketNumber); // we have to check the ticket numbers one by one
+
+        _mint(msg.sender, _nextTokenIndex);
+        unchecked {
+            _nextTokenIndex++;
+        }
+        nextTokenIndex = _nextTokenIndex;
+    }
+
     function presale(bytes[] calldata _signatureAddressAndTicketNumbers, uint256[] calldata ticketNumbers) external payable {
         uint256 _nextTokenIndex = nextTokenIndex; // uint256 private nextTokenIndex = 1;
         require(_nextTokenIndex + ticketNumbers.length < MAX_TOKEN_SUPPLY, "max supply"); // because 7778 - 1 = 7777
@@ -236,11 +318,11 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
 
         for (uint256 i = 0; i < ticketNumbers.length; i++) {
             require(
-                publicMintingAddress ==
+                publicMintingAddress == 
                     keccak256(
                         abi.encodePacked(
-                            "\x19Ethereum Signed Message:\n32",
-                            bytes32(abi.encodePacked(msg.sender, "+", ticketNumbers[i]))
+                            "\x19Ethereum Signed Message:\n64",
+                            abi.encode(msg.sender, ticketNumbers[i])
                         )
                     ).recover(_signatureAddressAndTicketNumbers[i]),
                 "not allowed"
@@ -461,5 +543,15 @@ contract DonkeVerse is ERC721Tradable, VRFConsumerBase {
             }
         }
         return true;
+    }
+
+    // not sure why anyone would want to burn such beautiful art
+    // but we want to make sure the token supply is accurate if they do
+    function burn(uint256 tokenId) external virtual {
+        require(burningEnabled == 1, "not enabled");
+        //solhint-disable-next-line max-line-length
+        require(_isApprovedOrOwner(_msgSender(), tokenId), "ERC721Burnable: caller is not owner nor approved");
+        nextTokenIndex--;
+        _burn(tokenId);
     }
 }
